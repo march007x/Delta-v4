@@ -72,8 +72,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
   if (pathname === "/") {
     return (
-      <LanguageLayer>
-        <>
+      <>
         <header className="on-hero absolute top-0 right-0 left-0 z-40">
           <div className="mx-auto flex h-18 max-w-6xl items-center justify-between gap-3 px-6 py-4 sm:px-8">
             <Brand tone="hero" />
@@ -90,14 +89,12 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         </header>
         <main id="main">{children}</main>
         <SiteFooter />
-        </>
-      </LanguageLayer>
+      </>
     );
   }
 
   return (
-    <LanguageLayer>
-      <div className="flex min-h-screen">
+    <div className="flex min-h-screen">
       <aside
         aria-hidden={!sidebarOpen}
         className={cx(
@@ -265,15 +262,16 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       ) : null}
-      </div>
-    </LanguageLayer>
+    </div>
   );
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <LanguageProvider>
-      <AppShellInner>{children}</AppShellInner>
+      <LanguageLayer>
+        <AppShellInner>{children}</AppShellInner>
+      </LanguageLayer>
     </LanguageProvider>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useLanguage } from "./layout/LanguageContext";
+import { useLanguage } from "./LanguageContext";
 
 const CACHE_KEY = "delta-translations-th-en-v2";
 const SKIP_TEXT_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "SVG", "PRE", "CODE"]);
@@ -40,7 +40,7 @@ function writeCache(cache: Record<string, string>) {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
   } catch {
-    // Keep translations working for the current session if storage is unavailable.
+    // Ignore storage failures; translation still works for this session.
   }
 }
 
@@ -118,8 +118,10 @@ function collectAttributes(root: HTMLElement) {
 
     for (const attribute of ["placeholder", "title", "aria-label"] as const) {
       const value = element.getAttribute(attribute);
-      if (value && isThai(normalize(value))) {
-        result.push({ element, attribute, source: normalize(value) });
+      const source = value ? normalize(value) : "";
+
+      if (source && isThai(source)) {
+        result.push({ element, attribute, source });
       }
     }
   }
@@ -139,6 +141,7 @@ async function translateRoot(root: HTMLElement) {
   for (const node of textNodes) {
     const source = normalize(node.nodeValue ?? "");
     if (!source) continue;
+
     const entry = entries.get(source) ?? { textNodes: [], attributes: [] };
     entry.textNodes.push(node);
     entries.set(source, entry);
@@ -202,6 +205,7 @@ function restore(
 
   for (const [element, attributes] of attributeOriginals) {
     if (!element.isConnected || !root.contains(element)) continue;
+
     for (const [attribute, value] of attributes) {
       element.setAttribute(attribute, value);
     }
@@ -230,19 +234,21 @@ export function LanguageLayer({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const textNodes = collectTextNodes(root);
-    for (const node of textNodes) {
+    for (const node of collectTextNodes(root)) {
       if (!originalsRef.current.has(node)) {
         originalsRef.current.set(node, node.nodeValue ?? "");
       }
     }
 
-    const elements = collectAttributes(root);
-    for (const item of elements) {
-      const attributes = attributeOriginalsRef.current.get(item.element) ?? new Map();
+    for (const item of collectAttributes(root)) {
+      const attributes =
+        attributeOriginalsRef.current.get(item.element) ??
+        new Map<TranslatableAttribute, string>();
+
       if (!attributes.has(item.attribute)) {
         attributes.set(item.attribute, item.element.getAttribute(item.attribute) ?? "");
       }
+
       attributeOriginalsRef.current.set(item.element, attributes);
     }
 
@@ -257,36 +263,32 @@ export function LanguageLayer({ children }: { children: React.ReactNode }) {
           document.title = translatedTitle;
         }
       })
-      .catch(() => {
-        // Keep the original title when translation is unavailable.
-      });
+      .catch(() => undefined);
 
-    void translateRoot(root).catch(() => {
-      // Keep the original Thai content when translation is unavailable.
-    });
+    void translateRoot(root);
 
     const observer = new MutationObserver(() => {
       if (cancelled || run !== runRef.current) return;
 
-      const addedTextNodes = collectTextNodes(root);
-      for (const node of addedTextNodes) {
+      for (const node of collectTextNodes(root)) {
         if (!originalsRef.current.has(node)) {
           originalsRef.current.set(node, node.nodeValue ?? "");
         }
       }
 
-      const addedAttributes = collectAttributes(root);
-      for (const item of addedAttributes) {
-        const attributes = attributeOriginalsRef.current.get(item.element) ?? new Map();
+      for (const item of collectAttributes(root)) {
+        const attributes =
+          attributeOriginalsRef.current.get(item.element) ??
+          new Map<TranslatableAttribute, string>();
+
         if (!attributes.has(item.attribute)) {
           attributes.set(item.attribute, item.element.getAttribute(item.attribute) ?? "");
         }
+
         attributeOriginalsRef.current.set(item.element, attributes);
       }
 
-      void translateRoot(root).catch(() => {
-        // Ignore transient translation/network failures.
-      });
+      void translateRoot(root);
     });
 
     observer.observe(root, { childList: true, subtree: true });
