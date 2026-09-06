@@ -11,6 +11,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { LanguageProvider, useLanguage } from "./LanguageContext";
 import { LanguageToggle } from "./LanguageToggle";
 import { SiteFooter } from "./SiteFooter";
+import { LanguageLayer } from "./LanguageLayer";
 
 const NAV_EN: Record<(typeof NAV)[number]["href"], string> = {
   "/progress": "Overview",
@@ -71,7 +72,8 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
   if (pathname === "/") {
     return (
-      <>
+      <LanguageLayer>
+        <>
         <header className="on-hero absolute top-0 right-0 left-0 z-40">
           <div className="mx-auto flex h-18 max-w-6xl items-center justify-between gap-3 px-6 py-4 sm:px-8">
             <Brand tone="hero" />
@@ -88,12 +90,14 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         </header>
         <main id="main">{children}</main>
         <SiteFooter />
-      </>
+        </>
+      </LanguageLayer>
     );
   }
 
   return (
-    <div className="flex min-h-screen">
+    <LanguageLayer>
+      <div className="flex min-h-screen">
       <aside
         aria-hidden={!sidebarOpen}
         className={cx(
@@ -261,7 +265,8 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       ) : null}
-    </div>
+      </div>
+    </LanguageLayer>
   );
 }
 

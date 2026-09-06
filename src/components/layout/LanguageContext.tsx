@@ -3,35 +3,45 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 export type Language = "th" | "en";
+export type Locale = Language;
 
 type LanguageContextValue = {
   language: Language;
+  locale: Locale;
   setLanguage: (language: Language) => void;
+  setLocale: (locale: Locale) => void;
   toggleLanguage: () => void;
+  toggleLocale: () => void;
 };
 
+const STORAGE_KEY = "delta-language";
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<Language>("th");
 
   useEffect(() => {
-    const saved = localStorage.getItem("delta-language");
-    if (saved === "th" || saved === "en") setLanguageState(saved);
+    const saved = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem("delta-locale");
+    if (saved === "th" || saved === "en") {
+      setLanguageState(saved);
+    }
   }, []);
 
-  function setLanguage(next: Language) {
-    setLanguageState(next);
-    localStorage.setItem("delta-language", next);
-    document.documentElement.lang = next === "en" ? "en" : "th";
-    window.dispatchEvent(new CustomEvent("delta:languagechange"));
-  }
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, language);
+    document.documentElement.lang = language;
+  }, [language]);
 
-  const value = useMemo(
+  const setLanguage = (next: Language) => setLanguageState(next);
+
+  const value = useMemo<LanguageContextValue>(
     () => ({
       language,
+      locale: language,
       setLanguage,
-      toggleLanguage: () => setLanguage(language === "th" ? "en" : "th"),
+      setLocale: setLanguage,
+      toggleLanguage: () => setLanguageState((current) => (current === "th" ? "en" : "th")),
+      toggleLocale: () => setLanguageState((current) => (current === "th" ? "en" : "th")),
     }),
     [language],
   );
