@@ -1,12 +1,19 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useLanguage } from "./LanguageContext";
+import { useLanguage } from "./layout/LanguageContext";
 
 const CACHE_KEY = "delta-translations-th-en-v2";
 const SKIP_TEXT_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "SVG", "PRE", "CODE"]);
 const SKIP_CLASSES = ["katex", "katex-display", "notranslate"];
 const BATCH_SIZE = 5;
+
+type TranslatableAttribute = "placeholder" | "title" | "aria-label";
+
+type AttributeTarget = {
+  element: HTMLElement;
+  attribute: TranslatableAttribute;
+};
 
 function isThai(text: string) {
   return /[\u0E00-\u0E7F]/.test(text);
@@ -33,7 +40,7 @@ function writeCache(cache: Record<string, string>) {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
   } catch {
-    // Translation remains usable for the current session.
+    // Keep translations working for the current session if storage is unavailable.
   }
 }
 
@@ -66,12 +73,14 @@ async function translateText(text: string) {
 
 function shouldSkip(node: Text) {
   let parent = node.parentElement;
+
   while (parent !== null) {
     if (SKIP_TEXT_TAGS.has(parent.tagName)) return true;
     if (SKIP_CLASSES.some((name) => parent.classList.contains(name))) return true;
     if (parent.closest("[data-no-translate='true']")) return true;
     parent = parent.parentElement;
   }
+
   return false;
 }
 
@@ -95,8 +104,10 @@ function collectTextNodes(root: HTMLElement) {
 }
 
 function collectAttributes(root: HTMLElement) {
-  const elements = Array.from(root.querySelectorAll<HTMLElement>("[placeholder], [title], [aria-label]"));
-  const result: Array<{ element: HTMLElement; attribute: "placeholder" | "title" | "aria-label"; source: string }> = [];
+  const elements = Array.from(
+    root.querySelectorAll<HTMLElement>("[placeholder], [title], [aria-label]"),
+  );
+  const result: Array<{ element: HTMLElement; attribute: TranslatableAttribute; source: string }> = [];
 
   for (const element of elements) {
     if (element.closest("[data-no-translate='true']")) continue;
@@ -117,7 +128,10 @@ async function translateRoot(root: HTMLElement) {
   const cache = readCache();
   const textNodes = collectTextNodes(root);
   const attributes = collectAttributes(root);
-  const entries = new Map<string, { textNodes: Text[]; attributes: Array<{ element: HTMLElement; attribute: "placeholder" | "title" | "aria-label" }> }>();
+  const entries = new Map<
+    string,
+    { textNodes: Text[]; attributes: AttributeTarget[] }
+  >();
 
   for (const node of textNodes) {
     const source = normalize(node.nodeValue ?? "");
@@ -177,7 +191,7 @@ async function translateRoot(root: HTMLElement) {
 function restore(
   root: HTMLElement,
   originals: Map<Text, string>,
-  attributeOriginals: Map<HTMLElement, Map<"placeholder" | "title" | "aria-label", string>>,
+  attributeOriginals: Map<HTMLElement, Map<TranslatableAttribute, string>>,
 ) {
   for (const [node, value] of originals) {
     if (node.isConnected && root.contains(node)) node.nodeValue = value;
@@ -196,7 +210,7 @@ export function LanguageLayer({ children }: { children: React.ReactNode }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const originalsRef = useRef(new Map<Text, string>());
   const attributeOriginalsRef = useRef(
-    new Map<HTMLElement, Map<"placeholder" | "title" | "aria-label", string>>(),
+    new Map<HTMLElement, Map<TranslatableAttribute, string>>(),
   );
   const runRef = useRef(0);
 
@@ -234,16 +248,18 @@ export function LanguageLayer({ children }: { children: React.ReactNode }) {
     const originalTitle = document.documentElement.dataset.deltaOriginalTitle ?? document.title;
     document.documentElement.dataset.deltaOriginalTitle = originalTitle;
 
-    void translateText(originalTitle).then((translatedTitle) => {
-      if (!cancelled && run === runRef.current && translatedTitle) {
-        document.title = translatedTitle;
-      }
-    }).catch(() => {
-      // Keep the original document title if translation is unavailable.
-    });
+    void translateText(originalTitle)
+      .then((translatedTitle) => {
+        if (!cancelled && run === runRef.current && translatedTitle) {
+          document.title = translatedTitle;
+        }
+      })
+      .catch(() => {
+        // Keep the original title when translation is unavailable.
+      });
 
-    void translateRoot(root).then(() => {
-      if (cancelled || run !== runRef.current) return;
+    void translateRoot(root).catch(() => {
+      // Keep the original Thai content when translation is unavailable.
     });
 
     const observer = new MutationObserver(() => {
@@ -265,7 +281,9 @@ export function LanguageLayer({ children }: { children: React.ReactNode }) {
         attributeOriginalsRef.current.set(item.element, attributes);
       }
 
-      void translateRoot(root);
+      void translateRoot(root).catch(() => {
+        // Ignore transient translation/network failures.
+      });
     });
 
     observer.observe(root, { childList: true, subtree: true });
